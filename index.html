@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ipon Tracker</title>
+<meta name="description" content="Daily spending log with projected monthly savings.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ipon">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#E8EFEB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1524" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Spline+Sans+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: one passbook-style column (max 520px): savings card, day entry, ledger, bills, plan, backup. */
+:root{
+  --paper:#E8EFEB;
+  --sheet:#F8FBF9;
+  --ink:#16213A;
+  --muted:#55665F;
+  --rule:#C6D3CC;
+  --stamp:#2F3B9C;
+  --stamp-soft:#DEE2F6;
+  --on-stamp:#F8FBF9;
+  --gain:#1B7043;
+  --gain-soft:#D6EDDE;
+  --loss:#B42318;
+  --loss-soft:#F6DDD9;
+  --shadow:rgb(22 33 58 / .10);
+  --font-ui:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --font-num:"Spline Sans Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --radius:14px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#0E1524; --sheet:#162034; --ink:#E2E9F1; --muted:#97A6B6; --rule:#2B3651;
+    --stamp:#A3ADFF; --stamp-soft:#252E58; --on-stamp:#0E1524;
+    --gain:#62CF92; --gain-soft:#163828; --loss:#FF8C7C; --loss-soft:#47201C;
+    --shadow:rgb(0 0 0 / .35);
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+html{background:var(--paper)}
+body{
+  margin:0;
+  background:var(--paper); color:var(--ink);
+  font-family:var(--font-ui); font-size:16px; line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-top:calc(12px + env(safe-area-inset-top, 0px));
+  padding-bottom:calc(40px + env(safe-area-inset-bottom, 0px));
+  -webkit-text-size-adjust:100%;
+  -webkit-tap-highlight-color:transparent;
+}
+button{font-family:inherit}
+[hidden]{display:none !important}
+:focus-visible{outline:2px solid var(--stamp); outline-offset:2px}
+.vh{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+.wrap{max-width:520px; margin:0 auto; display:flex; flex-direction:column; gap:14px}
+
+.top{display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap}
+.brand{font-stretch:75%; font-weight:800; font-size:22px; letter-spacing:.02em; text-transform:uppercase; color:var(--stamp); margin:0}
+.monthnav{display:flex; align-items:center; gap:4px; font-weight:600}
+#monthLabel{min-width:8.6em; text-align:center; font-variant-numeric:tabular-nums}
+.icon-btn{width:44px; height:44px; flex:none; border-radius:50%; border:1px solid var(--rule); background:var(--sheet); color:var(--ink); font-size:22px; line-height:1; display:grid; place-items:center; cursor:pointer}
+.icon-btn:disabled{opacity:.35; cursor:default}
+
+.notice{margin:0; padding:12px 14px; border-radius:12px; font-size:14px; background:var(--loss-soft); color:var(--loss)}
+.notice.info{background:var(--stamp-soft); color:var(--ink)}
+.notice.info b{color:var(--stamp)}
+
+.card{background:var(--sheet); border:1px solid var(--rule); border-radius:var(--radius); padding:16px}
+.sec{margin:0; font-size:13px; font-weight:700; letter-spacing:.09em; text-transform:uppercase; color:var(--muted)}
+.sec-head{display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap}
+.sub{font-size:13px; color:var(--muted)}
+
+/* Savings card */
+.hero{position:relative; overflow:hidden; padding:20px 18px 16px}
+.hero::before{content:""; position:absolute; inset:0; background-image:repeating-radial-gradient(circle at 108% -25%, var(--rule) 0 1px, transparent 1px 11px); opacity:.6; pointer-events:none}
+.hero > *{position:relative}
+.eyebrow{margin:0; font-size:12px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--muted)}
+.big{margin:6px 0 8px; font-family:var(--font-num); font-weight:600; font-size:clamp(40px, 12vw, 54px); line-height:1.05; letter-spacing:-.02em; font-variant-numeric:tabular-nums}
+.pill{display:inline-block; padding:4px 10px; border-radius:999px; font-family:var(--font-num); font-size:14px; font-weight:500; background:var(--stamp-soft); color:var(--stamp)}
+.pill.gain{background:var(--gain-soft); color:var(--gain)}
+.pill.loss{background:var(--loss-soft); color:var(--loss)}
+.vs{margin:0}
+.hero-row{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; padding-top:14px; border-top:1px dashed var(--rule)}
+.k{display:block; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+.v{display:block; font-family:var(--font-num); font-size:20px; font-weight:600; font-variant-numeric:tabular-nums}
+.v.loss{color:var(--loss)}
+.week{margin:12px 0 0; font-size:14px; color:var(--muted)}
+.week b{color:var(--ink); font-weight:600}
+.math{margin-top:12px; border-top:1px dashed var(--rule); padding-top:10px}
+.math summary{cursor:pointer; font-size:14px; font-weight:600; color:var(--stamp); min-height:32px; display:flex; align-items:center}
+.tbl{overflow-x:auto}
+table.m{width:100%; border-collapse:collapse; font-size:14px; margin-top:6px}
+table.m th{font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:600; text-align:right; padding:4px 0 6px 10px}
+table.m th:first-child{text-align:left; padding-left:0}
+table.m td{padding:6px 0 6px 10px; text-align:right; font-family:var(--font-num); font-variant-numeric:tabular-nums; border-top:1px solid var(--rule); white-space:nowrap}
+table.m td:first-child{text-align:left; padding-left:0; font-family:var(--font-ui); white-space:normal}
+table.m tr.total td{font-weight:600; border-top:2px solid var(--ink)}
+
+/* Day entry */
+.entry{display:flex; flex-direction:column; gap:14px}
+.entry-head{display:flex; align-items:center; justify-content:space-between; gap:8px}
+.entry-date{text-align:center; min-width:0}
+.entry-date h2{margin:0; font-size:20px; font-weight:700; font-stretch:90%}
+.seg{display:grid; grid-template-columns:1fr 1fr; padding:4px; gap:4px; border-radius:12px; background:var(--paper); border:1px solid var(--rule)}
+.seg button{min-height:44px; border:0; border-radius:9px; background:transparent; color:var(--muted); font-weight:600; font-size:15px; cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--sheet); color:var(--ink); box-shadow:0 1px 3px var(--shadow)}
+.seg button[aria-pressed="true"].office{color:var(--stamp)}
+.fields{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.field{min-width:0}
+.field label, .lbl{display:block; font-size:13px; font-weight:600; margin-bottom:4px}
+.money{display:flex; align-items:center; border:1px solid var(--rule); border-radius:10px; background:var(--paper); padding-left:10px}
+.money:focus-within{border-color:var(--stamp); box-shadow:0 0 0 3px var(--stamp-soft)}
+.money span{font-family:var(--font-num); color:var(--muted)}
+.money input{flex:1; min-width:0; width:100%; border:0; background:transparent; color:var(--ink); font-family:var(--font-num); font-weight:500; font-size:18px; padding:11px 10px 11px 4px; outline:none; font-variant-numeric:tabular-nums}
+.money input::placeholder{color:var(--muted); opacity:.6}
+.money input[aria-invalid="true"]{color:var(--loss)}
+.hint{margin:4px 0 0; font-size:12px; color:var(--muted); min-height:1.2em}
+.textin{width:100%; min-width:0; border:1px solid var(--rule); border-radius:10px; background:var(--paper); color:var(--ink); font-family:var(--font-ui); font-size:16px; padding:11px 10px}
+.textin:focus{outline:none; border-color:var(--stamp); box-shadow:0 0 0 3px var(--stamp-soft)}
+.result{display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-radius:12px; background:var(--paper); border:1px dashed var(--rule)}
+.result p{margin:0; font-size:14px; color:var(--muted); min-width:0}
+.result p b{color:var(--ink); font-weight:600}
+.amt{font-family:var(--font-num); font-size:22px; font-weight:600; white-space:nowrap; font-variant-numeric:tabular-nums}
+.amt.gain{color:var(--gain)}
+.amt.loss{color:var(--loss)}
+.status{margin:0; font-size:12px; color:var(--muted); text-align:right; min-height:1.2em}
+.status.err{color:var(--loss)}
+
+/* Ledger */
+.ledger{list-style:none; margin:8px 0 0; padding:0}
+.ledger li + li{border-top:1px solid var(--rule)}
+.subhead{margin:16px 0 4px; font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+.lrow{width:100%; display:grid; grid-template-columns:44px minmax(0,1fr) auto; gap:10px; align-items:center; padding:10px 6px; background:none; border:0; border-radius:8px; color:inherit; text-align:left; font:inherit; cursor:pointer}
+.lrow[aria-current="true"]{background:var(--stamp-soft)}
+.ld b{display:block; font-family:var(--font-num); font-size:18px; line-height:1.1}
+.ld small{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted)}
+.lm{min-width:0; display:flex; flex-direction:column; gap:2px}
+.tag{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted)}
+.tag.office{color:var(--stamp)}
+.br{font-size:13px; color:var(--muted); overflow-wrap:anywhere}
+.lr{text-align:right; font-family:var(--font-num); font-variant-numeric:tabular-nums}
+.tot{display:block; font-size:15px}
+.diff{display:block; font-size:13px}
+.diff.gain{color:var(--gain)}
+.diff.loss{color:var(--loss)}
+.empty{margin:10px 0 0; font-size:14px; color:var(--muted)}
+
+/* Bills */
+.bill{display:grid; grid-template-columns:minmax(0,1fr) 128px; gap:10px; align-items:center; padding:10px 0; border-top:1px solid var(--rule)}
+.bill:first-child{border-top:0}
+.bill .name{font-weight:600; display:block}
+.bill .planned{font-size:13px; color:var(--muted); font-family:var(--font-num)}
+.linkbtn{background:none; border:0; padding:6px 0; min-height:32px; color:var(--stamp); font-weight:600; font-size:13px; cursor:pointer; text-decoration:underline; text-underline-offset:3px}
+.billsbox{margin-top:6px}
+
+/* Plan */
+.plan summary{list-style:none; display:flex; justify-content:space-between; align-items:center; cursor:pointer; min-height:32px}
+.plan summary::-webkit-details-marker{display:none}
+.plan summary::after{content:"Edit"; font-size:14px; font-weight:600; color:var(--stamp)}
+.plan[open] summary::after{content:"Close"}
+.planbody{display:flex; flex-direction:column; gap:16px; margin-top:14px}
+.pgrid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+.stepper{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+.stepper output{font-family:var(--font-num); font-size:20px; font-weight:600; min-width:2ch; text-align:center}
+.billedit{display:grid; grid-template-columns:minmax(0,1fr) 118px 44px; gap:8px; align-items:center}
+.billedits{display:flex; flex-direction:column; gap:8px}
+.x{width:44px; height:44px; border-radius:10px; border:1px solid var(--rule); background:transparent; color:var(--muted); font-size:13px; font-weight:600; cursor:pointer}
+.x.arm{background:var(--loss-soft); color:var(--loss); border-color:var(--loss); font-size:11px}
+.btn{display:inline-flex; align-items:center; justify-content:center; min-height:44px; padding:0 16px; border-radius:10px; border:1px solid var(--stamp); background:var(--stamp); color:var(--on-stamp); font-weight:600; font-size:15px; cursor:pointer}
+.btn.ghost{background:transparent; color:var(--stamp)}
+.btn.danger{background:var(--loss); border-color:var(--loss); color:var(--sheet)}
+.btns{display:flex; gap:10px; flex-wrap:wrap}
+.note{margin:0; font-size:13px; color:var(--muted)}
+.backup p{margin:8px 0 12px; font-size:14px; color:var(--muted)}
+.confirm{margin-top:12px; padding:12px 14px; border-radius:12px; border:1px solid var(--loss); background:var(--loss-soft)}
+.confirm p{margin:0 0 10px; color:var(--ink)}
+
+@media (max-width:360px){
+  .fields, .pgrid{grid-template-columns:1fr}
+  .bill{grid-template-columns:minmax(0,1fr) 110px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 class="brand">Ipon Tracker</h1>
+    <nav class="monthnav" aria-label="Month">
+      <button id="prevMonth" class="icon-btn" type="button" aria-label="Previous month">&#8249;</button>
+      <span id="monthLabel">This month</span>
+      <button id="nextMonth" class="icon-btn" type="button" aria-label="Next month">&#8250;</button>
+    </nav>
+  </header>
+
+  <p id="installTip" class="notice info" hidden>Log from the <b>Home Screen icon</b>, not this Safari tab. Tap Share, then <b>Add to Home Screen</b>. The icon keeps its own saved data, separate from Safari.</p>
+  <p id="notice" class="notice" hidden></p>
+
+  <section class="card hero" aria-labelledby="heroLabel">
+    <p class="eyebrow" id="heroLabel">Projected savings</p>
+    <p class="big" id="projSavings">&mdash;</p>
+    <p class="vs"><span id="vsPill" class="pill">On plan</span></p>
+    <div class="hero-row">
+      <div><span class="k">Savings goal</span><span class="v" id="goalVal">&mdash;</span></div>
+      <div><span class="k" id="freeLabel">Free to spend</span><span class="v" id="freeVal">&mdash;</span></div>
+    </div>
+    <p class="week" id="weekLine"></p>
+    <details class="math" id="mathBox">
+      <summary>See the math</summary>
+      <div class="tbl" id="mathTable"></div>
+    </details>
+  </section>
+
+  <section class="card entry" id="entryCard" aria-labelledby="entryTitle">
+    <div class="entry-head">
+      <button id="prevDay" class="icon-btn" type="button" aria-label="Previous day">&#8249;</button>
+      <div class="entry-date">
+        <h2 id="entryTitle">Today</h2>
+        <span id="entrySub" class="sub">&nbsp;</span>
+      </div>
+      <button id="nextDay" class="icon-btn" type="button" aria-label="Next day">&#8250;</button>
+    </div>
+    <div id="entryFields" style="display:flex;flex-direction:column;gap:14px">
+      <div class="seg" role="group" aria-label="Day type">
+        <button id="segOffice" class="office" type="button" aria-pressed="false">Office day</button>
+        <button id="segHome" type="button" aria-pressed="true">Home</button>
+      </div>
+      <div class="fields">
+        <div class="field">
+          <label for="inFood">Food</label>
+          <div class="money"><span>&#8369;</span><input id="inFood" data-field="food" inputmode="decimal" autocomplete="off" placeholder="0"></div>
+          <p class="hint" id="hintFood"></p>
+        </div>
+        <div class="field">
+          <label for="inCommute">Commute</label>
+          <div class="money"><span>&#8369;</span><input id="inCommute" data-field="commute" inputmode="decimal" autocomplete="off" placeholder="0"></div>
+          <p class="hint" id="hintCommute"></p>
+        </div>
+        <div class="field">
+          <label for="inGroceries">Groceries</label>
+          <div class="money"><span>&#8369;</span><input id="inGroceries" data-field="groceries" inputmode="decimal" autocomplete="off" placeholder="0"></div>
+          <p class="hint" id="hintGroceries"></p>
+        </div>
+        <div class="field">
+          <label for="inOther">Other</label>
+          <div class="money"><span>&#8369;</span><input id="inOther" data-field="other" inputmode="decimal" autocomplete="off" placeholder="0"></div>
+          <p class="hint" id="hintOther"></p>
+        </div>
+      </div>
+      <div>
+        <label class="lbl" for="inNote">Note</label>
+        <input id="inNote" class="textin" type="text" autocomplete="off" placeholder="e.g. rice meal + jeep">
+      </div>
+    </div>
+    <div class="result" id="dayResult"><p>&nbsp;</p></div>
+    <p class="status" id="saveStatus" aria-live="polite"></p>
+  </section>
+
+  <section class="card" aria-labelledby="ledgerTitle">
+    <h2 class="sec" id="ledgerTitle">Ledger</h2>
+    <div id="ledgerBox"></div>
+  </section>
+
+  <section class="card" aria-labelledby="billsTitle">
+    <div class="sec-head">
+      <h2 class="sec" id="billsTitle">Bills</h2>
+      <span id="billsSum" class="sub"></span>
+    </div>
+    <div id="billsList" class="billsbox"></div>
+  </section>
+
+  <details class="card plan" id="planBox">
+    <summary><h2 class="sec">Your plan</h2></summary>
+    <div class="planbody" id="planBody"></div>
+  </details>
+
+  <section class="card backup" aria-labelledby="backupTitle">
+    <h2 class="sec" id="backupTitle">Backup</h2>
+    <p>Everything is saved on this phone only. Save a backup to Files now and then, so deleting the icon or changing phones doesn't wipe your log.</p>
+    <div class="btns">
+      <button id="btnJson" class="btn" type="button">Save backup</button>
+      <label class="btn ghost" for="importFile">Restore backup</label>
+      <input id="importFile" class="vh" type="file" accept=".json,application/json">
+      <button id="btnCsv" class="btn ghost" type="button">This month as CSV</button>
+    </div>
+    <div id="importConfirm" class="confirm" hidden>
+      <p id="importText">Replace everything on this phone with this backup?</p>
+      <div class="btns">
+        <button id="importYes" class="btn danger" type="button">Replace my data</button>
+        <button id="importNo" class="btn ghost" type="button">Cancel</button>
+      </div>
+    </div>
+    <p id="backupStatus" class="note" aria-live="polite" style="margin-top:10px"></p>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(id){ return document.getElementById(id); };
+  var MINUS = "−";
+  var FIELDS = ["food","commute","groceries","other"];
+  var STORE_KEY = "ipon-tracker:v1";
+
+  // Starting plan. Everything here can be changed under "Your plan" in the app.
+  var DEFAULT_SETTINGS = {
+    income: 21000,
+    bills: [
+      {id:"rent", name:"Rent", amount:4750},
+      {id:"electricity", name:"Electricity", amount:1500},
+      {id:"water", name:"Water", amount:100},
+      {id:"internet", name:"Internet", amount:625},
+      {id:"laundry", name:"Laundry", amount:400},
+      {id:"claude", name:"Claude", amount:1500}
+    ],
+    officeFood: 100,
+    officeCommute: 200,
+    groceriesWeekly: 500,
+    officeDaysPerWeek: 3,
+    savingsGoal: 4500
+  };
+
+  var now = new Date();
+  var today = {y:now.getFullYear(), m:now.getMonth()+1, d:now.getDate()};
+  var view = {y:today.y, m:today.m};
+  var entryDay = today.d;
+
+  // ---------- storage (this device only) ----------
+  var storageOk = true;
+  var store = loadStore();
+  var settings = store.settings;
+  var month = store.months[monthId()] || blankMonth();
+  var saveTimer = null, lastSaveOk = null;
+
+  function loadStore(){
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (raw){
+        var o = JSON.parse(raw);
+        return {settings: normalizeSettings(o.settings || DEFAULT_SETTINGS), months: normalizeMonths(o.months)};
+      }
+    } catch(_){ storageOk = false; }
+    return {settings: normalizeSettings(DEFAULT_SETTINGS), months: {}};
+  }
+  function persistNow(){
+    clearTimeout(saveTimer); saveTimer = null;
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(store));
+      lastSaveOk = true;
+    } catch(_){
+      lastSaveOk = false;
+    }
+    setStatus();
+  }
+  function queueSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(persistNow, 300);
+    setStatus();
+  }
+  function setStatus(){
+    var st = $("saveStatus");
+    st.classList.toggle("err", lastSaveOk === false);
+    if (lastSaveOk === false) st.textContent = "Couldn't save on this phone. Your storage may be full or blocked.";
+    else if (saveTimer) st.textContent = "Saving…";
+    else st.textContent = lastSaveOk ? "Saved on this phone" : "";
+  }
+  function touchMonth(){ store.months[monthId()] = month; queueSave(); }
+
+  // ---------- helpers ----------
+  function blankMonth(){ return {days:{}, bills:{}}; }
+  function clone(o){ return JSON.parse(JSON.stringify(o)); }
+  function num(v){ var n = Number(v); return isFinite(n) ? n : 0; }
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function monthId(){ return view.y + "-" + pad(view.m); }
+  function daysIn(y,m){ return new Date(y, m, 0).getDate(); }
+  function fmt(n){ return Math.abs(Math.round(n)).toLocaleString("en-US"); }
+  function money(n){ var r = Math.round(n); return (r < 0 ? MINUS : "") + "₱" + fmt(r); }
+  function signed(n){ var r = Math.round(n); if (r === 0) return "₱0"; return (r > 0 ? "+" : MINUS) + "₱" + fmt(r); }
+  function tone(n){ var r = Math.round(n); return r > 0 ? "gain" : r < 0 ? "loss" : ""; }
+  function dayDate(d){ return new Date(view.y, view.m - 1, d); }
+  function monthCmp(){ return (view.y*100 + view.m) - (today.y*100 + today.m); }
+  function isPast(d){ var c = monthCmp(); return c < 0 || (c === 0 && d < today.d); }
+  function isToday(d){ return monthCmp() === 0 && d === today.d; }
+  function rate(){ return num(settings.officeFood) + num(settings.officeCommute); }
+  function entry(d){ return month.days[pad(d)] || {}; }
+  function hasPlanned(){ return typeof month.plannedOfficeDays === "number" && isFinite(month.plannedOfficeDays); }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]; }); }
+  function parseAmount(raw){
+    var s = String(raw).replace(/[,₱\s]/g, "");
+    if (s === "") return null;
+    var n = Number(s);
+    if (!isFinite(n) || n < 0) return undefined;
+    return Math.round(n * 100) / 100;
+  }
+  function rangeLabel(a,b){
+    var mon = dayDate(a).toLocaleDateString("en-US", {month:"short"});
+    return a === b ? mon + " " + a : mon + " " + a + "–" + b;
+  }
+  function normalizeSettings(d){
+    var s = Object.assign({}, clone(DEFAULT_SETTINGS), d || {});
+    ["income","officeFood","officeCommute","groceriesWeekly","officeDaysPerWeek","savingsGoal"].forEach(function(k){ s[k] = num(s[k]); });
+    s.bills = Array.isArray(s.bills) ? s.bills.filter(function(b){ return b && b.id; }).map(function(b){
+      return {id:String(b.id), name:String(b.name || ""), amount:num(b.amount)};
+    }) : [];
+    return s;
+  }
+  function normalizeMonth(d){
+    var m = blankMonth();
+    if (d && d.days && typeof d.days === "object") m.days = clone(d.days);
+    if (d && d.bills && typeof d.bills === "object") m.bills = clone(d.bills);
+    if (d && typeof d.plannedOfficeDays === "number" && isFinite(d.plannedOfficeDays)) m.plannedOfficeDays = d.plannedOfficeDays;
+    return m;
+  }
+  function normalizeMonths(ms){
+    var out = {};
+    if (ms && typeof ms === "object"){
+      Object.keys(ms).forEach(function(k){ if (/^\d{4}-\d{2}$/.test(k)) out[k] = normalizeMonth(ms[k]); });
+    }
+    return out;
+  }
+
+  // ---------- the math ----------
+  function compute(){
+    var s = settings, D = daysIn(view.y, view.m), r = rate();
+    var weekdays = 0, d, e;
+    for (d = 1; d <= D; d++){ var w = dayDate(d).getDay(); if (w >= 1 && w <= 5) weekdays++; }
+    var autoPlanned = Math.round(weekdays * num(s.officeDaysPerWeek) / 5);
+    var planned = hasPlanned() ? month.plannedOfficeDays : autoPlanned;
+
+    // Office days: logged ones count what you spent; unlogged ones count full budget.
+    var marked = 0, officeProj = 0, other = 0, unlogged = 0;
+    for (d = 1; d <= D; d++){
+      e = entry(d);
+      var fc = num(e.food) + num(e.commute);
+      if (e.office){
+        marked++;
+        var logged = e.food != null || e.commute != null;
+        officeProj += logged ? fc : r;
+        if (!logged && isPast(d)) unlogged++;
+      } else {
+        officeProj += fc;
+      }
+      other += num(e.other);
+    }
+    officeProj += Math.max(0, planned - marked) * r;
+
+    // Groceries in 7-day blocks from the 1st. Unspent money counts once the block ends.
+    var weekly = num(s.groceriesWeekly), blocks = [];
+    for (var start = 1; start <= D; start += 7){
+      var end = Math.min(start + 6, D), len = end - start + 1, budget = weekly * len / 7;
+      var spent = 0, glogged = false;
+      for (d = start; d <= end; d++){ var g = entry(d).groceries; if (g != null){ glogged = true; spent += num(g); } }
+      var ended = isPast(end);
+      var proj = ended ? (glogged ? spent : budget) : Math.max(spent, budget);
+      blocks.push({start:start, end:end, budget:budget, spent:spent, proj:proj});
+    }
+    var groceryPlan = 0, groceryProj = 0, grocerySpent = 0;
+    blocks.forEach(function(b){ groceryPlan += b.budget; groceryProj += b.proj; grocerySpent += b.spent; });
+
+    // Bills: what you paid if entered, otherwise the planned amount.
+    var billsPlan = 0, billsProj = 0, billsPaid = 0;
+    s.bills.forEach(function(b){
+      var p = month.bills[b.id];
+      billsPlan += num(b.amount);
+      billsProj += (p != null ? num(p) : num(b.amount));
+      if (p != null) billsPaid += num(p);
+    });
+
+    var officePlan = planned * r;
+    var income = num(s.income);
+    var plannedSavings = income - (billsPlan + groceryPlan + officePlan);
+    var projSavings = income - (billsProj + groceryProj + officeProj + other);
+    var goal = num(s.savingsGoal);
+    return {
+      D:D, weekdays:weekdays, autoPlanned:autoPlanned, planned:planned, unlogged:unlogged,
+      blocks:blocks, groceryPlan:groceryPlan, groceryProj:groceryProj, grocerySpent:grocerySpent,
+      billsPlan:billsPlan, billsProj:billsProj, billsPaid:billsPaid,
+      officePlan:officePlan, officeProj:officeProj, other:other, income:income,
+      plannedSavings:plannedSavings, projSavings:projSavings,
+      vsPlan:projSavings - plannedSavings, goal:goal, free:projSavings - goal
+    };
+  }
+  function blockFor(c, d){ for (var i = 0; i < c.blocks.length; i++){ var b = c.blocks[i]; if (d >= b.start && d <= b.end) return b; } return null; }
+  function dayInfo(d){
+    var e = entry(d), r = rate();
+    var fc = num(e.food) + num(e.commute);
+    var logged = e.food != null || e.commute != null;
+    var diff = null;
+    if (e.office){ if (logged) diff = r - fc; }
+    else if (fc > 0) diff = -fc;
+    var total = fc + num(e.groceries) + num(e.other);
+    var any = FIELDS.some(function(k){ return e[k] != null; }) || !!e.note || !!e.office;
+    return {e:e, fc:fc, logged:logged, diff:diff, total:total, any:any};
+  }
+
+  // ---------- rendering ----------
+  function withFocus(fn){
+    var a = document.activeElement, id = a && a.id, s = null, en = null;
+    try { s = a.selectionStart; en = a.selectionEnd; } catch(_){}
+    fn();
+    if (id){
+      var n = $(id);
+      if (n && n !== document.activeElement){
+        try { n.focus({preventScroll:true}); if (s != null) n.setSelectionRange(s, en); } catch(_){}
+      }
+    }
+  }
+  function focusInside(el){ return el && el.contains(document.activeElement); }
+
+  function renderHeader(){
+    $("monthLabel").textContent = new Date(view.y, view.m - 1, 1).toLocaleDateString("en-US", {month:"long", year:"numeric"});
+  }
+
+  function renderDash(c){
+    var monthName = new Date(view.y, view.m - 1, 1).toLocaleDateString("en-US", {month:"long"});
+    $("heroLabel").textContent = "Projected savings, " + monthName;
+    $("projSavings").textContent = money(c.projSavings);
+    var r = Math.round(c.vsPlan), pill = $("vsPill");
+    pill.className = "pill " + (r > 0 ? "gain" : r < 0 ? "loss" : "");
+    pill.textContent = r === 0 ? "On plan" : signed(r) + " vs plan";
+    $("goalVal").textContent = money(c.goal);
+    var fl = $("freeLabel"), fv = $("freeVal");
+    if (c.free >= 0){ fl.textContent = "Free to spend"; fv.textContent = money(c.free); fv.className = "v"; }
+    else { fl.textContent = "Short of goal"; fv.textContent = money(-c.free); fv.className = "v loss"; }
+
+    var html = "";
+    if (monthCmp() === 0){
+      var b = blockFor(c, today.d);
+      if (b){
+        var left = b.budget - b.spent;
+        html = "Groceries " + esc(rangeLabel(b.start, b.end)) + ": <b>" + (left >= 0 ? money(left) + " left" : money(-left) + " over") + "</b> of " + money(b.budget);
+      }
+    } else {
+      html = "Groceries this month: <b>" + money(c.grocerySpent) + "</b> logged of " + money(c.groceryPlan);
+    }
+    if (c.unlogged > 0) html += " · " + c.unlogged + " past office day" + (c.unlogged > 1 ? "s" : "") + " not logged";
+    $("weekLine").innerHTML = html;
+
+    var rows = [
+      ["Take-home pay", c.income, c.income],
+      ["Bills", -c.billsPlan, -c.billsProj],
+      ["Groceries", -c.groceryPlan, -c.groceryProj],
+      ["Office days (" + c.planned + " planned)", -c.officePlan, -c.officeProj],
+      ["Other spending", 0, -c.other]
+    ];
+    var t = "<table class=\"m\"><thead><tr><th></th><th>Plan</th><th>Projected</th></tr></thead><tbody>";
+    rows.forEach(function(row){ t += "<tr><td>" + esc(row[0]) + "</td><td>" + money(row[1]) + "</td><td>" + money(row[2]) + "</td></tr>"; });
+    t += "<tr class=\"total\"><td>Savings</td><td>" + money(c.plannedSavings) + "</td><td>" + money(c.projSavings) + "</td></tr></tbody></table>";
+    t += "<p class=\"note\" style=\"margin-top:8px\">Unspent grocery money counts as saved when its week ends. Office days you haven't logged yet count at full budget.</p>";
+    $("mathTable").innerHTML = t;
+  }
+
+  function renderEntry(c){
+    var D = daysIn(view.y, view.m);
+    if (entryDay > D) entryDay = D;
+    if (entryDay < 1) entryDay = 1;
+    $("entryTitle").textContent = dayDate(entryDay).toLocaleDateString("en-US", {weekday:"short", month:"short", day:"numeric"});
+    $("entrySub").textContent = isToday(entryDay) ? "Today" : isPast(entryDay) ? "Past day" : "Upcoming";
+    $("prevDay").disabled = entryDay <= 1;
+    $("nextDay").disabled = entryDay >= D;
+    var e = entry(entryDay);
+    $("segOffice").setAttribute("aria-pressed", e.office ? "true" : "false");
+    $("segHome").setAttribute("aria-pressed", e.office ? "false" : "true");
+    FIELDS.forEach(function(f){
+      var inp = $("in" + f.charAt(0).toUpperCase() + f.slice(1));
+      if (document.activeElement !== inp){ inp.value = e[f] != null ? String(e[f]) : ""; inp.removeAttribute("aria-invalid"); }
+    });
+    var note = $("inNote");
+    if (document.activeElement !== note) note.value = e.note || "";
+    renderEntryResult(c);
+  }
+
+  function renderEntryResult(c){
+    var info = dayInfo(entryDay), e = info.e, r = rate();
+    var text, amt = "";
+    if (e.office){
+      if (info.logged){
+        text = "Office day: <b>" + money(r) + "</b> budget, " + money(info.fc) + " spent on food and commute.";
+        amt = "<span class=\"amt " + tone(info.diff) + "\">" + signed(info.diff) + "</span>";
+      } else {
+        text = "Office day: <b>" + money(r) + "</b> budget for food and commute. Log what you spent.";
+      }
+    } else if (info.fc > 0){
+      text = "Home day. Food or commute today wasn't in your plan.";
+      amt = "<span class=\"amt loss\">" + signed(-info.fc) + "</span>";
+    } else {
+      text = "Home day. Your meals come from your groceries.";
+    }
+    $("dayResult").innerHTML = "<p>" + text + "</p>" + amt;
+
+    $("hintFood").textContent = e.office ? "Budget " + money(num(settings.officeFood)) : "No budget on home days";
+    $("hintCommute").textContent = e.office ? "Round trip budget " + money(num(settings.officeCommute)) : "No budget on home days";
+    var b = blockFor(c, entryDay);
+    if (b){
+      var left = b.budget - b.spent;
+      $("hintGroceries").textContent = (left >= 0 ? money(left) + " left" : money(-left) + " over") + " for " + rangeLabel(b.start, b.end);
+    } else $("hintGroceries").textContent = "";
+    $("hintOther").textContent = c.free >= 0 ? "Free to spend: " + money(c.free) : "Short of goal by " + money(-c.free);
+  }
+
+  function ledgerRow(d){
+    var info = dayInfo(d), e = info.e, parts = [];
+    if (e.food != null) parts.push("Food " + fmt(e.food));
+    if (e.commute != null) parts.push("Commute " + fmt(e.commute));
+    if (e.groceries != null) parts.push("Groceries " + fmt(e.groceries));
+    if (e.other != null) parts.push("Other " + fmt(e.other));
+    var br = parts.join(" · ");
+    if (e.note) br += (br ? " · " : "") + e.note;
+    if (!br) br = e.office ? (isPast(d) ? "Not logged" : "Planned") : "Nothing logged";
+    var tag = e.office ? "<span class=\"tag office\">Office</span>" : (info.any ? "<span class=\"tag\">Home</span>" : "");
+    var diff = info.diff != null ? "<span class=\"diff " + tone(info.diff) + "\">" + signed(info.diff) + "</span>" : "";
+    var tot = FIELDS.some(function(k){ return e[k] != null; }) ? money(info.total) : "—";
+    var dow = dayDate(d).toLocaleDateString("en-US", {weekday:"short"});
+    return "<li><button type=\"button\" class=\"lrow\" data-day=\"" + d + "\"" + (d === entryDay ? " aria-current=\"true\"" : "") + ">" +
+      "<span class=\"ld\"><b>" + d + "</b><small>" + (isToday(d) ? "Today" : dow) + "</small></span>" +
+      "<span class=\"lm\">" + tag + "<span class=\"br\">" + esc(br) + "</span></span>" +
+      "<span class=\"lr\"><span class=\"tot\">" + tot + "</span>" + diff + "</span></button></li>";
+  }
+
+  function renderLedger(){
+    var D = daysIn(view.y, view.m), past = [], upcoming = [], d;
+    var lastPast = monthCmp() < 0 ? D : monthCmp() === 0 ? today.d : 0;
+    for (d = lastPast; d >= 1; d--){ if (dayInfo(d).any || isToday(d) || d === entryDay) past.push(ledgerRow(d)); }
+    for (d = lastPast + 1; d <= D; d++){ if (dayInfo(d).any || d === entryDay) upcoming.push(ledgerRow(d)); }
+    var html = "";
+    if (past.length) html += "<ol class=\"ledger\">" + past.join("") + "</ol>";
+    if (upcoming.length) html += "<p class=\"subhead\">Coming up</p><ol class=\"ledger\">" + upcoming.join("") + "</ol>";
+    if (!html) html = "<p class=\"empty\">Nothing logged for this month yet. Tap a day above and mark your office days as you plan them.</p>";
+    $("ledgerBox").innerHTML = html;
+  }
+
+  function renderBills(c){
+    var list = $("billsList");
+    $("billsSum").textContent = "Paid " + money(c.billsPaid) + " of " + money(c.billsPlan);
+    if (focusInside(list)) return;
+    if (!settings.bills.length){ list.innerHTML = "<p class=\"empty\">No bills yet. Add them under Your plan.</p>"; return; }
+    var html = "";
+    settings.bills.forEach(function(b){
+      var p = month.bills[b.id];
+      var id = "bill_" + b.id;
+      html += "<div class=\"bill\"><div><label class=\"name\" for=\"" + esc(id) + "\">" + esc(b.name || "Bill") + "</label>" +
+        "<span class=\"planned\">Plan " + money(b.amount) + "</span>" +
+        (p == null ? " <button type=\"button\" class=\"linkbtn\" data-paid=\"" + esc(b.id) + "\">Paid in full</button>" : "") +
+        "</div><div class=\"money\"><span>₱</span><input id=\"" + esc(id) + "\" data-bill=\"" + esc(b.id) + "\" inputmode=\"decimal\" autocomplete=\"off\" placeholder=\"Unpaid\" value=\"" + (p != null ? esc(p) : "") + "\"></div></div>";
+    });
+    list.innerHTML = html;
+  }
+
+  function planInput(id, label, value, hint){
+    return "<div class=\"field\"><label for=\"" + id + "\">" + label + "</label><div class=\"money\"><span>₱</span><input id=\"" + id + "\" data-setting=\"" + id.slice(2) + "\" inputmode=\"decimal\" autocomplete=\"off\" value=\"" + esc(value) + "\"></div>" + (hint ? "<p class=\"hint\">" + hint + "</p>" : "") + "</div>";
+  }
+
+  function renderPlan(c){
+    var body = $("planBody");
+    if (focusInside(body)) { renderStepper(c); return; }
+    var s = settings, html = "";
+    html += "<div class=\"pgrid\">" +
+      planInput("p_income", "Take-home pay / month", s.income) +
+      planInput("p_savingsGoal", "Savings goal / month", s.savingsGoal) +
+      planInput("p_officeFood", "Food per office day", s.officeFood) +
+      planInput("p_officeCommute", "Commute per office day", s.officeCommute, "Round trip") +
+      planInput("p_groceriesWeekly", "Groceries per week", s.groceriesWeekly) +
+      "<div class=\"field\"><label for=\"p_officeDaysPerWeek\">Office days per week</label><input id=\"p_officeDaysPerWeek\" data-setting=\"officeDaysPerWeek\" class=\"textin\" inputmode=\"numeric\" autocomplete=\"off\" value=\"" + esc(s.officeDaysPerWeek) + "\"></div>" +
+      "</div>";
+    html += "<div><span class=\"lbl\">Office days this month</span><div class=\"stepper\">" +
+      "<button type=\"button\" class=\"icon-btn\" id=\"offMinus\" aria-label=\"One fewer office day\">−</button>" +
+      "<output id=\"offCount\">" + c.planned + "</output>" +
+      "<button type=\"button\" class=\"icon-btn\" id=\"offPlus\" aria-label=\"One more office day\">+</button>" +
+      "<span class=\"note\" id=\"offNote\"></span></div></div>";
+    html += "<div><span class=\"lbl\">Monthly bills</span><div class=\"billedits\">";
+    s.bills.forEach(function(b){
+      html += "<div class=\"billedit\"><input id=\"bn_" + esc(b.id) + "\" class=\"textin\" data-billname=\"" + esc(b.id) + "\" aria-label=\"Bill name\" autocomplete=\"off\" placeholder=\"Bill name\" value=\"" + esc(b.name) + "\">" +
+        "<div class=\"money\"><span>₱</span><input id=\"ba_" + esc(b.id) + "\" data-billamt=\"" + esc(b.id) + "\" aria-label=\"" + esc(b.name || "Bill") + " amount\" inputmode=\"decimal\" autocomplete=\"off\" value=\"" + esc(b.amount) + "\"></div>" +
+        "<button type=\"button\" class=\"x\" data-remove=\"" + esc(b.id) + "\" aria-label=\"Remove " + esc(b.name || "bill") + "\">✕</button></div>";
+    });
+    html += "</div><div class=\"btns\" style=\"margin-top:10px\"><button type=\"button\" class=\"btn ghost\" id=\"addBill\">Add a bill</button></div></div>";
+    body.innerHTML = html;
+    renderStepper(c);
+  }
+  function renderStepper(c){
+    var out = $("offCount"), note = $("offNote");
+    if (!out) return;
+    out.textContent = c.planned;
+    note.innerHTML = hasPlanned() ? "<button type=\"button\" class=\"linkbtn\" id=\"offReset\">Reset to " + c.autoPlanned + "</button>" : "Auto: " + c.weekdays + " weekdays this month";
+    $("offMinus").disabled = c.planned <= 0;
+  }
+
+  function renderAll(){
+    var c = compute();
+    withFocus(function(){
+      renderHeader(); renderDash(c); renderEntry(c); renderLedger(); renderBills(c); renderPlan(c);
+    });
+  }
+  function renderNumbers(){
+    var c = compute();
+    withFocus(function(){
+      renderDash(c); renderEntryResult(c); renderLedger(); renderBills(c); renderStepper(c);
+    });
+  }
+
+  function switchMonth(delta){
+    if (saveTimer) persistNow();
+    var m = view.m + delta, y = view.y;
+    if (m < 1){ m = 12; y--; } else if (m > 12){ m = 1; y++; }
+    view = {y:y, m:m};
+    entryDay = monthCmp() === 0 ? today.d : 1;
+    month = store.months[monthId()] || blankMonth();
+    renderAll();
+  }
+
+  // ---------- edits ----------
+  function editEntry(mutator){
+    var k = pad(entryDay);
+    var e = Object.assign({}, month.days[k] || {});
+    mutator(e);
+    var keep = FIELDS.some(function(f){ return e[f] != null; }) || e.note || e.office;
+    if (keep) month.days[k] = e; else delete month.days[k];
+    touchMonth();
+  }
+
+  $("entryFields").addEventListener("input", function(ev){
+    var t = ev.target;
+    if (t.dataset.field){
+      var v = parseAmount(t.value);
+      if (v === undefined){ t.setAttribute("aria-invalid", "true"); return; }
+      t.removeAttribute("aria-invalid");
+      editEntry(function(e){ if (v === null) delete e[t.dataset.field]; else e[t.dataset.field] = v; });
+      renderNumbers();
+    } else if (t.id === "inNote"){
+      var val = t.value.slice(0, 120);
+      editEntry(function(e){ if (val.trim()) e.note = val; else delete e.note; });
+      renderNumbers();
+    }
+  });
+  $("segOffice").addEventListener("click", function(){ editEntry(function(e){ e.office = true; }); renderAll(); });
+  $("segHome").addEventListener("click", function(){ editEntry(function(e){ delete e.office; }); renderAll(); });
+  $("prevDay").addEventListener("click", function(){ if (entryDay > 1){ entryDay--; renderAll(); } });
+  $("nextDay").addEventListener("click", function(){ if (entryDay < daysIn(view.y, view.m)){ entryDay++; renderAll(); } });
+  $("prevMonth").addEventListener("click", function(){ switchMonth(-1); });
+  $("nextMonth").addEventListener("click", function(){ switchMonth(1); });
+
+  $("ledgerBox").addEventListener("click", function(ev){
+    var b = ev.target.closest("[data-day]");
+    if (!b) return;
+    entryDay = Number(b.dataset.day);
+    renderAll();
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    $("entryCard").scrollIntoView({behavior: reduce ? "auto" : "smooth", block:"start"});
+  });
+
+  $("billsList").addEventListener("input", function(ev){
+    var t = ev.target;
+    if (!t.dataset.bill) return;
+    var v = parseAmount(t.value);
+    if (v === undefined){ t.setAttribute("aria-invalid", "true"); return; }
+    t.removeAttribute("aria-invalid");
+    if (v === null) delete month.bills[t.dataset.bill]; else month.bills[t.dataset.bill] = v;
+    touchMonth();
+    renderNumbers();
+  });
+  $("billsList").addEventListener("focusout", function(){
+    setTimeout(function(){ if (!focusInside($("billsList"))) renderBills(compute()); }, 0);
+  });
+  $("billsList").addEventListener("click", function(ev){
+    var b = ev.target.closest("[data-paid]");
+    if (!b) return;
+    var id = b.dataset.paid, bill = settings.bills.filter(function(x){ return x.id === id; })[0];
+    if (!bill) return;
+    month.bills[id] = num(bill.amount);
+    touchMonth();
+    renderAll();
+  });
+
+  function editSettings(mutator){ mutator(settings); queueSave(); }
+  $("planBody").addEventListener("input", function(ev){
+    var t = ev.target;
+    if (t.dataset.setting){
+      var v = parseAmount(t.value);
+      if (v === undefined){ t.setAttribute("aria-invalid", "true"); return; }
+      t.removeAttribute("aria-invalid");
+      if (t.dataset.setting === "officeDaysPerWeek" && v !== null) v = Math.min(7, Math.round(v));
+      editSettings(function(s){ s[t.dataset.setting] = v === null ? 0 : v; });
+      renderNumbers();
+    } else if (t.dataset.billname){
+      editSettings(function(s){ s.bills.forEach(function(b){ if (b.id === t.dataset.billname) b.name = t.value.slice(0, 40); }); });
+      renderNumbers();
+    } else if (t.dataset.billamt){
+      var a = parseAmount(t.value);
+      if (a === undefined){ t.setAttribute("aria-invalid", "true"); return; }
+      t.removeAttribute("aria-invalid");
+      editSettings(function(s){ s.bills.forEach(function(b){ if (b.id === t.dataset.billamt) b.amount = a === null ? 0 : a; }); });
+      renderNumbers();
+    }
+  });
+  $("planBody").addEventListener("focusout", function(){
+    setTimeout(function(){ if (!focusInside($("planBody"))) renderAll(); }, 0);
+  });
+  var armed = null, armTimer = null;
+  $("planBody").addEventListener("click", function(ev){
+    var t = ev.target;
+    if (t.id === "offPlus" || t.id === "offMinus"){
+      var n = compute().planned + (t.id === "offPlus" ? 1 : -1);
+      if (n < 0) return;
+      month.plannedOfficeDays = n;
+      touchMonth();
+      renderNumbers();
+      return;
+    }
+    if (t.id === "offReset"){
+      delete month.plannedOfficeDays;
+      touchMonth();
+      renderNumbers();
+      return;
+    }
+    if (t.id === "addBill"){
+      var id = "b" + Date.now().toString(36);
+      editSettings(function(s){ s.bills.push({id:id, name:"", amount:0}); });
+      if (document.activeElement) document.activeElement.blur();
+      renderAll();
+      var ni = $("bn_" + id); if (ni) ni.focus();
+      return;
+    }
+    var rm = t.closest("[data-remove]");
+    if (rm){
+      var rid = rm.dataset.remove;
+      if (armed !== rid){
+        armed = rid; rm.classList.add("arm"); rm.textContent = "Remove";
+        clearTimeout(armTimer);
+        armTimer = setTimeout(function(){ armed = null; rm.classList.remove("arm"); rm.textContent = "✕"; }, 3000);
+        return;
+      }
+      armed = null; clearTimeout(armTimer);
+      editSettings(function(s){ s.bills = s.bills.filter(function(b){ return b.id !== rid; }); });
+      if (document.activeElement) document.activeElement.blur();
+      renderAll();
+    }
+  });
+
+  // ---------- backup ----------
+  function stamp(){ return today.y + "-" + pad(today.m) + "-" + pad(today.d); }
+  function offerFile(filename, text, mime){
+    var file = null;
+    try { file = new File([text], filename, {type:mime}); } catch(_){}
+    if (file && navigator.canShare && navigator.share){
+      var ok = false;
+      try { ok = navigator.canShare({files:[file]}); } catch(_){}
+      if (ok){
+        return navigator.share({files:[file]}).then(function(){ return "shared"; }, function(err){
+          if (err && err.name === "AbortError") return "cancelled";
+          return download();
+        });
+      }
+    }
+    return Promise.resolve(download());
+    function download(){
+      var url = URL.createObjectURL(new Blob([text], {type:mime}));
+      var a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 5000);
+      return "downloaded";
+    }
+  }
+  $("btnJson").addEventListener("click", function(){
+    if (saveTimer) persistNow();
+    var data = JSON.stringify({app:"Ipon Tracker", exportedAt:new Date().toISOString(), settings:store.settings, months:store.months}, null, 2);
+    offerFile("ipon-backup-" + stamp() + ".json", data, "application/json").then(function(how){
+      $("backupStatus").textContent = how === "cancelled" ? "" : how === "shared" ? "Backup ready. Pick Save to Files to keep it." : "Backup saved to your downloads.";
+    });
+  });
+  $("btnCsv").addEventListener("click", function(){
+    var D = daysIn(view.y, view.m), lines = ["Date,Day type,Food,Commute,Groceries,Other,Note"];
+    for (var d = 1; d <= D; d++){
+      var info = dayInfo(d), e = info.e;
+      if (!info.any) continue;
+      var note = (e.note || "").replace(/"/g, "\"\"");
+      lines.push([view.y + "-" + pad(view.m) + "-" + pad(d), e.office ? "Office" : "Home",
+        e.food != null ? e.food : "", e.commute != null ? e.commute : "", e.groceries != null ? e.groceries : "", e.other != null ? e.other : "", "\"" + note + "\""].join(","));
+    }
+    offerFile("ipon-" + monthId() + ".csv", lines.join("\n"), "text/csv").then(function(how){
+      $("backupStatus").textContent = how === "cancelled" ? "" : how === "shared" ? "CSV ready. Pick Save to Files to keep it." : "CSV saved to your downloads.";
+    });
+  });
+
+  var pendingImport = null;
+  $("importFile").addEventListener("change", function(ev){
+    var f = ev.target.files && ev.target.files[0];
+    ev.target.value = "";
+    if (!f) return;
+    var reader = new FileReader();
+    reader.onload = function(){
+      try {
+        var o = JSON.parse(String(reader.result));
+        if (!o || typeof o !== "object" || !o.settings || typeof o.months !== "object") throw new Error("shape");
+        pendingImport = {settings: normalizeSettings(o.settings), months: normalizeMonths(o.months)};
+        var count = Object.keys(pendingImport.months).length;
+        var when = o.exportedAt ? new Date(o.exportedAt).toLocaleDateString("en-US", {month:"short", day:"numeric", year:"numeric"}) : "this file";
+        $("importText").textContent = "Replace everything on this phone with the backup from " + when + " (" + count + " month" + (count === 1 ? "" : "s") + ")?";
+        $("importConfirm").hidden = false;
+        $("backupStatus").textContent = "";
+      } catch(_){
+        pendingImport = null;
+        $("backupStatus").textContent = "That file isn't an Ipon Tracker backup. Pick a file named ipon-backup-….json.";
+      }
+    };
+    reader.onerror = function(){ $("backupStatus").textContent = "Couldn't read that file. Try picking it again."; };
+    reader.readAsText(f);
+  });
+  $("importNo").addEventListener("click", function(){ pendingImport = null; $("importConfirm").hidden = true; });
+  $("importYes").addEventListener("click", function(){
+    if (!pendingImport) return;
+    store = pendingImport; pendingImport = null;
+    settings = store.settings;
+    month = store.months[monthId()] || blankMonth();
+    persistNow();
+    $("importConfirm").hidden = true;
+    $("backupStatus").textContent = lastSaveOk ? "Backup restored." : "Couldn't save the restored data on this phone.";
+    renderAll();
+  });
+
+  // ---------- start ----------
+  var standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+  var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (isIOS && !standalone) $("installTip").hidden = false;
+  if (!storageOk){
+    var n = $("notice"); n.textContent = "This browser is blocking saved data, so your entries won't be kept. Open the app from your Home Screen icon."; n.hidden = false;
+  }
+  if (navigator.storage && navigator.storage.persist){ navigator.storage.persist().catch(function(){}); }
+  if ("serviceWorker" in navigator && location.protocol === "https:"){ navigator.serviceWorker.register("/sw.js").catch(function(){}); }
+
+  document.addEventListener("visibilitychange", function(){ if (document.visibilityState === "hidden" && saveTimer) persistNow(); });
+  window.addEventListener("pagehide", function(){ if (saveTimer) persistNow(); });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

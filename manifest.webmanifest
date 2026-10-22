@@ -1,0 +1,14 @@
+{
+  "name": "Ipon Tracker",
+  "short_name": "Ipon",
+  "description": "Daily spending log with projected monthly savings.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#E8EFEB",
+  "theme_color": "#E8EFEB",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
